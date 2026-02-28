@@ -1,0 +1,381 @@
+import React, { useState, useEffect } from "react";
+
+/**
+ * Parse the glossary response.
+ * If the response is a string, try to parse it as JSON.
+ * If it is already an object (array), return it directly.
+ */
+function parseGlossaryResponse(raw) {
+  if (!raw) return [];
+  if (typeof raw === "object") return raw;
+  try {
+    const arr = JSON.parse(raw);
+    if (Array.isArray(arr)) {
+      // Normalize each object to have "term" and "definition" keys.
+      return arr.map((obj) => {
+        const term = Object.keys(obj)[0];
+        return { term, definition: obj[term] };
+      });
+    }
+  } catch (err) {
+    console.error("Could not parse glossary JSON:", err, raw);
+  }
+  return [];
+}
+
+/**
+ * A collapsible item representing one glossary entry.
+ */
+function GlossaryItem({ term, definition }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ marginBottom: "10px" }}>
+      <div
+        style={{
+          cursor: "pointer",
+          fontSize: "1.2rem",
+          fontWeight: "bold",
+          textAlign: "left",
+        }}
+        onClick={() => setOpen(!open)}
+      >
+        <strong style={{ fontSize: "1.5rem", textTransform: "uppercase" }}>
+          {term}
+        </strong>{" "}
+        {open ? "▲" : "▼"}
+      </div>
+      {open && (
+        <p
+          style={{
+            margin: "5px 0 0 10px",
+            fontSize: "1.2rem",
+            textAlign: "left",
+          }}
+        >
+          {definition}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Renders the Glossary section as a stack (newest on top).
+ */
+function Glossary({ sessionGlossary }) {
+  if (!sessionGlossary.length) {
+    return (
+      <p style={{ fontSize: "1.2rem", textAlign: "left" }}>
+        No glossary entries yet.
+      </p>
+    );
+  }
+  return (
+    <div>
+      {sessionGlossary.map((entry, index) => (
+        <GlossaryItem key={index} term={entry.term} definition={entry.definition} />
+      ))}
+    </div>
+  );
+}
+
+function LoginScreen({ setLoggedIn }) {
+    return (
+      <div
+        style={{
+          padding: "10px",
+          fontFamily: "Arial, sans-serif",
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+        }}
+      >
+        <h2 style={{ textAlign: "center", textTransform: "uppercase" }}>
+          Log In
+        </h2>
+        <input
+          type="text"
+          placeholder="Enter your name..."
+          style={{
+            width: "100%",
+            padding: "5px",
+            fontSize: "1.2rem",
+            marginBottom: "10px",
+          }}
+          value={userName}
+          onChange={(e) => setUserName(e.target.value)}
+        />
+        <input
+          type="text"
+          placeholder="Enter your background..."
+          style={{
+            width: "100%",
+            padding: "5px",
+            fontSize: "1.2rem",
+            marginBottom: "10px",
+          }}
+          value={userBackground}
+          onChange={(e) => setUserBackground(e.target.value)}
+        />
+        <button
+          style={{
+            width: "100%",
+            padding: "5px",
+            fontSize: "1.2rem",
+            cursor: "pointer",
+          }}
+          onClick={() => {
+            // Basic validation
+            if (userName.trim() && userBackground.trim()) {
+              // Optionally, send the background to the backend
+              if (
+                window.chrome &&
+                window.chrome.runtime &&
+                window.chrome.runtime.sendMessage
+              ) {
+                window.chrome.runtime.sendMessage(
+                  {
+                    type: "SET_BACKGROUND",
+                    payload: { sessionId, background: userBackground },
+                  },
+                  (response) => {
+                    if (response && response.success) {
+                      console.log("User background set successfully.");
+                    } else {
+                      console.error(
+                        "Error setting background:",
+                        response?.error
+                      );
+                    }
+                  }
+                );
+              }
+              setLoggedIn(true);
+            } else {
+              alert("Please enter both your name and background.");
+            }
+          }}
+        >
+          Submit
+        </button>
+      </div>
+    );
+  }
+
+/**
+ * The main sidebar component for the Chrome extension.
+ */
+function CaptionSidebar() {
+  // --- Login states ---
+  const [loggedIn, setLoggedIn] = useState(false);
+  const [userName, setUserName] = useState("");
+  const [userBackground, setUserBackground] = useState("");
+
+  // --- Main functionality states ---
+  const [caption, setCaption] = useState("Waiting for live transcription...");
+  const [glossary, setGlossary] = useState("");
+  const [latestTerm, setLatestTerm] = useState(null);
+  const [pendingTerms, setPendingTerms] = useState([]);
+  const [latestTermTimestamp, setLatestTermTimestamp] = useState(null);
+  const [sessionGlossary, setSessionGlossary] = useState([]);
+  const [sessionId, setSessionId] = useState(null);
+
+  console.log("loggedIn", loggedIn)
+  console.log("caption", caption)
+  console.log("glossary", glossary)
+  console.log("latestTerm", latestTerm)
+
+  // On mount, retrieve or generate a unique session ID.
+  useEffect(() => {
+    let id = localStorage.getItem("session_id");
+    if (!id) {
+      id = Date.now().toString();
+      localStorage.setItem("session_id", id);
+    }
+    setSessionId(id);
+    console.log("Session ID set to:", id);
+  }, []);
+  
+
+  // 2. Main functionality once logged in.
+
+  // Listen for transcription updates from the iframe.
+  useEffect(() => {
+    const handleMessage = (event) => {
+      if (event.data && event.data.type === "TRANSCRIPTION_UPDATE") {
+        console.log("CaptionSidebar received transcription update:", event.data.text);
+        setCaption(event.data.text);
+      }
+    };
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, []);
+
+  // When the caption changes, request a glossary update from the background.
+  useEffect(() => {
+    if (caption && caption !== "Waiting for live transcription..." && sessionId) {
+      console.log(
+        "CaptionSidebar sending message to background for glossary update with transcript:",
+        caption
+      );
+      if (
+        window.chrome &&
+        window.chrome.runtime &&
+        window.chrome.runtime.sendMessage
+      ) {
+        window.chrome.runtime.sendMessage(
+          {
+            type: "GENERATE_GLOSSARY",
+            payload: { sessionId, transcript: caption },
+          },
+          (response) => {
+            console.log(
+              "CaptionSidebar received response from background:",
+              response
+            );
+            if (response && response.success) {
+              setGlossary(response.data.glossary);
+            } else {
+              console.error("Error in background response:", response?.error);
+            }
+          }
+        );
+      } else {
+        console.error(
+          "chrome.runtime.sendMessage is not available in this context."
+        );
+      }
+    }
+  }, [caption, sessionId]);
+
+  // Parse the raw glossary response and update the "latest term" logic + persistent glossary.
+  useEffect(() => {
+    if (glossary) {
+      const newDefs = parseGlossaryResponse(glossary);
+      if (newDefs.length > 0) {
+        // If there's no current latest term, take the last of newDefs as latest.
+        if (!latestTerm) {
+          const newLatest = newDefs[newDefs.length - 1];
+          setLatestTerm(newLatest);
+          setLatestTermTimestamp(Date.now());
+          if (newDefs.length > 1) {
+            setPendingTerms(newDefs.slice(0, -1));
+          }
+        } else {
+          // If we do have a latest term, add new terms to the pending queue.
+          setPendingTerms((prev) => [...prev, ...newDefs]);
+        }
+      }
+
+      // Update the persistent glossary (stack with newest on top)
+      setSessionGlossary((prev) => {
+        const updated = [...prev];
+        newDefs.forEach((entry) => {
+          const exists = updated.some(
+            (item) => item.term.toLowerCase() === entry.term.toLowerCase()
+          );
+          if (!exists) {
+            updated.unshift(entry); // unshift => newest on top
+          }
+        });
+        return updated;
+      });
+    }
+  }, [glossary, latestTerm]);
+
+  // Timer: once the latest term has been displayed >=10s, if there are pending terms,
+  // replace the current term with the newest pending term.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (latestTerm && latestTermTimestamp) {
+        const elapsed = Date.now() - latestTermTimestamp;
+        if (elapsed >= 10000 && pendingTerms.length > 0) {
+          const newLatest = pendingTerms[pendingTerms.length - 1];
+
+          // Move the replaced term to session glossary if not already present
+          setSessionGlossary((prev) => {
+            const exists = prev.some(
+              (item) => item.term.toLowerCase() === latestTerm.term.toLowerCase()
+            );
+            if (!exists) {
+              return [latestTerm, ...prev];
+            }
+            return prev;
+          });
+
+          setLatestTerm(newLatest);
+          setLatestTermTimestamp(Date.now());
+          // Clear all pending terms
+          setPendingTerms([]);
+        }
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [latestTerm, latestTermTimestamp, pendingTerms]);
+
+  // The "Latest Term" display area
+  const latestTermDisplay = latestTerm ? (
+    <div style={{ fontSize: "1.2rem", textAlign: "left" }}>
+      <strong style={{ fontSize: "1.2rem" }}>
+        <em>{latestTerm.term}</em>
+      </strong>
+      <p
+        style={{
+          margin: "5px 0 0 10px",
+          fontSize: "1.2rem",
+          textAlign: "left",
+        }}
+      >
+        {latestTerm.definition}
+      </p>
+    </div>
+  ) : (
+    <p style={{ fontSize: "1.2rem", textAlign: "left" }}>
+      No latest term available.
+    </p>
+  );
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        fontFamily: "Arial, sans-serif",
+      }}
+    >
+      {/* Latest Term section (flex: 3) */}
+      <div style={{ flex: 3, overflowY: "auto", padding: "10px", borderBottom: "1px solid #ccc" }}>
+        <h3
+          style={{
+            fontSize: "1.5rem",
+            textAlign: "center",
+            textTransform: "uppercase",
+            marginTop: "0",
+          }}
+        >
+          LATEST TERM
+        </h3>
+        {latestTermDisplay}
+      </div>
+
+      {/* Glossary section (flex: 4) */}
+      <div style={{ flex: 4, overflowY: "auto", padding: "10px" }}>
+        <h3
+          style={{
+            fontSize: "1.5rem",
+            textAlign: "center",
+            textTransform: "uppercase",
+            marginTop: "0",
+          }}
+        >
+          GLOSSARY
+        </h3>
+        <Glossary sessionGlossary={sessionGlossary} />
+      </div>
+    </div>
+  );
+}
+
+export default CaptionSidebar;
