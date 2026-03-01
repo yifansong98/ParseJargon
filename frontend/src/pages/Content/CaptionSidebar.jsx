@@ -4,6 +4,7 @@ const MODEL_OPTIONS = [
   { value: "gpt-4o", label: "GPT-4o" },
   { value: "gpt-4o-mini", label: "GPT-4o-mini" },
   { value: "gpt-5.2", label: "GPT-5.2" },
+  { value: "gpt-realtime", label: "GPT-Realtime" },
 ];
 
 const TERM_DISPLAY_MS = 7000;
@@ -54,57 +55,101 @@ function mergeUniqueQueue(prev, incoming, latestTerm) {
   return queue;
 }
 
+function feedbackButtonStyle(active) {
+  return {
+    cursor: "pointer",
+    width: "34px",
+    height: "34px",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: "12px",
+    padding: 0,
+    borderRadius: "8px",
+    border: active ? "2px solid #f4a23c" : "2px solid rgba(255, 255, 255, 0.24)",
+    backgroundColor: active ? "rgba(244, 162, 60, 0.2)" : "rgba(255, 255, 255, 0.03)",
+    boxShadow: active ? "0 0 12px rgba(244, 162, 60, 0.32)" : "none",
+    boxSizing: "border-box",
+    lineHeight: 1,
+    opacity: active ? 1 : 0.8,
+  };
+}
+
+const iconGlyphStyle = {
+  fontSize: "1.35rem",
+  userSelect: "none",
+};
+
+function FeedbackIcons({ feedback, onLike, onDislike }) {
+  return (
+    <div style={{ marginTop: "10px", textAlign: "center", lineHeight: 1 }}>
+      <button
+        type="button"
+        onClick={onLike}
+        aria-pressed={feedback === "up"}
+        title="Helpful term"
+        style={feedbackButtonStyle(feedback === "up")}
+      >
+        <span style={iconGlyphStyle}>👍</span>
+      </button>
+      <button
+        type="button"
+        onClick={onDislike}
+        aria-pressed={feedback === "down"}
+        title="I already know this term"
+        style={{ ...feedbackButtonStyle(feedback === "down"), marginRight: 0 }}
+      >
+        <span style={iconGlyphStyle}>👎</span>
+      </button>
+    </div>
+  );
+}
+
 function GlossaryItem({ item, onFeedback }) {
   const [open, setOpen] = useState(false);
   const { term, definition, feedback } = item;
 
   return (
-    <div style={{ marginBottom: "12px" }}>
+    <div style={{ marginBottom: "14px" }}>
       <div
-        onClick={() => setOpen(!open)}
-        style={{ cursor: "pointer", textAlign: "left", fontSize: "0.95rem" }}
+        onClick={() => setOpen((prev) => !prev)}
+        style={{
+          cursor: "pointer",
+          fontSize: "1.1rem",
+          fontWeight: 700,
+          fontStyle: "italic",
+          lineHeight: 1.3,
+          textAlign: "left",
+        }}
       >
-        <strong style={{ textTransform: "capitalize" }}>{term}</strong> {open ? "[-]" : "[+]"}
+        {term} {open ? "▼" : "▲"}
       </div>
 
-      {open && <p style={{ margin: "6px 0 0 4px", fontSize: "0.88rem" }}>{definition}</p>}
+      {open && (
+        <p
+          style={{
+            margin: "7px 0 0 2px",
+            fontSize: "0.98rem",
+            lineHeight: 1.25,
+            textAlign: "left",
+          }}
+        >
+          {definition}
+        </p>
+      )}
 
-      <div style={{ marginTop: "4px" }}>
-        <button
-          type="button"
-          onClick={() => onFeedback(term, feedback === "up" ? null : "up")}
-          style={{
-            marginRight: "6px",
-            fontSize: "0.75rem",
-            border: "1px solid #666",
-            backgroundColor: feedback === "up" ? "#0f5132" : "#222",
-            color: "#fff",
-            cursor: "pointer",
-          }}
-        >
-          Like
-        </button>
-        <button
-          type="button"
-          onClick={() => onFeedback(term, feedback === "down" ? null : "down")}
-          style={{
-            fontSize: "0.75rem",
-            border: "1px solid #666",
-            backgroundColor: feedback === "down" ? "#842029" : "#222",
-            color: "#fff",
-            cursor: "pointer",
-          }}
-        >
-          Dislike
-        </button>
-      </div>
+      <FeedbackIcons
+        feedback={feedback}
+        onLike={() => onFeedback(term, feedback === "up" ? null : "up")}
+        onDislike={() => onFeedback(term, feedback === "down" ? null : "down")}
+      />
     </div>
   );
 }
 
 function Glossary({ items, onFeedback }) {
   if (!items.length) {
-    return <p style={{ textAlign: "left", fontSize: "0.9rem" }}>No glossary entries yet.</p>;
+    return <p style={{ textAlign: "left", fontSize: "1rem" }}>No glossary entries yet.</p>;
   }
 
   return (
@@ -132,7 +177,7 @@ function ModelSelector({ selectedModel, setSelectedModel }) {
           backgroundColor: "#333",
           color: "#fff",
           border: "1px solid #555",
-          fontSize: "0.9rem",
+          fontSize: "0.95rem",
         }}
       >
         {MODEL_OPTIONS.map((option) => (
@@ -160,7 +205,7 @@ function LoginScreen({
       style={{
         backgroundColor: "#000",
         color: "#fff",
-        padding: "10px",
+        padding: "12px",
         fontFamily: "Arial, sans-serif",
         height: "100%",
         display: "flex",
@@ -168,9 +213,9 @@ function LoginScreen({
         justifyContent: "center",
       }}
     >
-      <h2 style={{ textAlign: "center", textTransform: "uppercase", marginTop: 0 }}>Log In</h2>
+      <h2 style={{ textAlign: "center", textTransform: "uppercase", marginTop: 0 }}>ParseJargon</h2>
 
-      <label htmlFor="username" style={{ marginBottom: "4px", fontSize: "0.85rem" }}>
+      <label htmlFor="username" style={{ marginBottom: "4px", fontSize: "0.95rem" }}>
         User Name
       </label>
       <input
@@ -180,33 +225,34 @@ function LoginScreen({
         onChange={(event) => setUserName(event.target.value)}
         style={{
           width: "100%",
-          padding: "6px",
+          padding: "8px",
           marginBottom: "10px",
-          backgroundColor: "#333",
+          backgroundColor: "#1e1e1e",
           color: "#fff",
           border: "1px solid #555",
-          fontSize: "0.9rem",
+          fontSize: "0.95rem",
         }}
       />
 
-      <label htmlFor="background" style={{ marginBottom: "4px", fontSize: "0.85rem" }}>
+      <label htmlFor="background" style={{ marginBottom: "4px", fontSize: "0.95rem" }}>
         Background
       </label>
       <textarea
         id="background"
         value={userBackground}
         onChange={(event) => setUserBackground(event.target.value)}
-        placeholder="One sentence about your education and/or role"
+        placeholder="One sentence about your education and/or job role"
         style={{
           width: "100%",
-          height: "100px",
-          padding: "6px",
+          height: "110px",
+          padding: "8px",
           marginBottom: "10px",
           resize: "none",
-          backgroundColor: "#333",
+          backgroundColor: "#1e1e1e",
           color: "#fff",
           border: "1px solid #555",
-          fontSize: "0.9rem",
+          fontSize: "0.95rem",
+          lineHeight: 1.25,
         }}
       />
 
@@ -218,12 +264,14 @@ function LoginScreen({
         disabled={isSubmitting}
         style={{
           width: "100%",
-          padding: "8px",
-          fontSize: "0.95rem",
+          padding: "9px",
+          fontSize: "1rem",
           cursor: isSubmitting ? "not-allowed" : "pointer",
-          border: "1px solid #666",
-          backgroundColor: isSubmitting ? "#222" : "#444",
+          border: "2px solid #f4a23c",
+          borderRadius: "10px",
+          backgroundColor: isSubmitting ? "#222" : "#111",
           color: "#fff",
+          fontWeight: 700,
         }}
       >
         {isSubmitting ? "Submitting..." : "Submit"}
@@ -352,6 +400,26 @@ function CaptionSidebar() {
   }, [caption, loggedIn, meetingId, selectedModel, sessionId]);
 
   useEffect(() => {
+    const terms = new Set();
+    sessionGlossary.forEach((item) => {
+      if (item?.term) {
+        terms.add(item.term);
+      }
+    });
+    if (latestTerm?.term) {
+      terms.add(latestTerm.term);
+    }
+
+    window.postMessage(
+      {
+        type: "PARSEJARGON_HIGHLIGHT_TERMS",
+        terms: [...terms],
+      },
+      "*"
+    );
+  }, [latestTerm, sessionGlossary]);
+
+  useEffect(() => {
     const interval = setInterval(() => {
       const currentLatest = latestTermRef.current;
       const latestTimestamp = latestTimestampRef.current;
@@ -477,6 +545,24 @@ function CaptionSidebar() {
     );
   }
 
+  const latestContainerStyle = {
+    backgroundColor: "#000",
+    border: "3px solid #f4a23c",
+    borderRadius: "26px",
+    padding: "12px 14px",
+    margin: "8px 8px 6px 8px",
+    boxSizing: "border-box",
+  };
+
+  const glossaryContainerStyle = {
+    backgroundColor: "#000",
+    border: "3px solid #f4a23c",
+    borderRadius: "26px",
+    padding: "12px 14px",
+    margin: "6px 8px 8px 8px",
+    boxSizing: "border-box",
+  };
+
   return (
     <div
       style={{
@@ -488,59 +574,73 @@ function CaptionSidebar() {
         color: "#fff",
       }}
     >
-      <div style={{ padding: "10px", borderBottom: "1px solid #444" }}>
-        <h3 style={{ margin: "0 0 8px 0", textAlign: "center", fontSize: "1rem" }}>ParseJargon</h3>
-        <ModelSelector selectedModel={selectedModel} setSelectedModel={setSelectedModel} />
-        <p style={{ margin: 0, fontSize: "0.75rem", opacity: 0.8 }}>Live caption: {caption}</p>
-      </div>
+      <div style={{ ...latestContainerStyle, flex: 0.95, overflowY: "auto" }}>
+        <h3
+          style={{
+            margin: "0 0 10px 0",
+            textAlign: "center",
+            fontSize: "1.85rem",
+            textTransform: "uppercase",
+            lineHeight: 1,
+            letterSpacing: "0.5px",
+          }}
+        >
+          Latest Term
+        </h3>
 
-      <div style={{ flex: 1, overflowY: "auto", padding: "10px", borderBottom: "1px solid #444" }}>
-        <h3 style={{ marginTop: 0, textAlign: "center", fontSize: "0.95rem" }}>Latest Term</h3>
         {latestTerm ? (
           <div>
-            <strong style={{ textTransform: "capitalize", fontSize: "0.95rem" }}>{latestTerm.term}</strong>
-            <p style={{ margin: "6px 0", fontSize: "0.88rem" }}>{latestTerm.definition}</p>
-            <div>
-              <button
-                type="button"
-                onClick={() =>
-                  handleFeedback(latestTerm.term, latestTerm.feedback === "up" ? null : "up")
-                }
-                style={{
-                  marginRight: "6px",
-                  fontSize: "0.75rem",
-                  border: "1px solid #666",
-                  backgroundColor: latestTerm.feedback === "up" ? "#0f5132" : "#222",
-                  color: "#fff",
-                  cursor: "pointer",
-                }}
-              >
-                Like
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  handleFeedback(latestTerm.term, latestTerm.feedback === "down" ? null : "down")
-                }
-                style={{
-                  fontSize: "0.75rem",
-                  border: "1px solid #666",
-                  backgroundColor: latestTerm.feedback === "down" ? "#842029" : "#222",
-                  color: "#fff",
-                  cursor: "pointer",
-                }}
-              >
-                Dislike
-              </button>
+            <div
+              style={{
+                fontSize: "1.6rem",
+                fontWeight: 700,
+                fontStyle: "italic",
+                lineHeight: 1.1,
+                textAlign: "left",
+                marginBottom: "8px",
+              }}
+            >
+              {latestTerm.term}
             </div>
+            <p
+              style={{
+                margin: 0,
+                fontSize: "0.98rem",
+                lineHeight: 1.15,
+                textAlign: "left",
+                wordBreak: "break-word",
+              }}
+            >
+              {latestTerm.definition}
+            </p>
+
+            <FeedbackIcons
+              feedback={latestTerm.feedback}
+              onLike={() => handleFeedback(latestTerm.term, latestTerm.feedback === "up" ? null : "up")}
+              onDislike={() =>
+                handleFeedback(latestTerm.term, latestTerm.feedback === "down" ? null : "down")
+              }
+            />
           </div>
         ) : (
-          <p style={{ margin: 0, fontSize: "0.9rem" }}>No jargon detected yet.</p>
+          <p style={{ margin: 0, fontSize: "1rem", lineHeight: 1.3 }}>No jargon detected yet.</p>
         )}
       </div>
 
-      <div style={{ flex: 2, overflowY: "auto", padding: "10px" }}>
-        <h3 style={{ marginTop: 0, textAlign: "center", fontSize: "0.95rem" }}>Glossary</h3>
+      <div style={{ ...glossaryContainerStyle, flex: 1.35, overflowY: "auto" }}>
+        <h3
+          style={{
+            margin: "0 0 10px 0",
+            textAlign: "center",
+            fontSize: "1.85rem",
+            textTransform: "uppercase",
+            lineHeight: 1,
+            letterSpacing: "0.5px",
+          }}
+        >
+          Glossary
+        </h3>
+
         <Glossary items={sessionGlossary} onFeedback={handleFeedback} />
       </div>
     </div>

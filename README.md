@@ -75,6 +75,8 @@ Load extension in Chrome:
      - `gpt-4o`
      - `gpt-4o-mini`
      - `gpt-5.2` (`reasoning.effort = none`)
+     - `gpt-realtime`
+   - Note: model availability depends on your OpenAI project/account access. If one model is unavailable, select another.
 5. Click `Submit`.
 6. Turn on "Show Captions"
 7. As captions update, glossary terms and definitions appear in the sidebar.
@@ -88,4 +90,13 @@ Session and glossary data are persisted in:
 
 You can delete this file to reset local state.
 
+## 6. Acknowledgment
 
+The frontend Chrome extension was built based on:
+
+- https://github.com/lxieyang/chrome-extension-boilerplate-react
+
+This dependency is MIT-licensed by Michael Xieyang Liu. The preserved third-party
+license text is included at:
+
+- `frontend/THIRD_PARTY_LICENSES/chrome-extension-boilerplate-react-MIT.txt`

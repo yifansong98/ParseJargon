@@ -1,10 +1,16 @@
 /* pages/Content/content.styles.css */
 
 #zoom-sidebar-extension {
-    font-size: 14px;
-  }
-  
-  #zoom-sidebar-extension h3 {
-    margin-top: 0;
-  }
+  font-size: 14px;
+}
+
+#zoom-sidebar-extension h3 {
+  margin-top: 0;
+}
+
+#live-transcription-subtitle .live-transcription-subtitle__item strong em {
+  font-style: italic;
+  font-weight: 700;
+  text-decoration: underline;
+}
   

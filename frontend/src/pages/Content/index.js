@@ -8,11 +8,78 @@ function getMeetingIdFromUrl(url) {
   return match ? match[1] : null;
 }
 
+function normalizeTerms(rawTerms) {
+  if (!Array.isArray(rawTerms)) {
+    return [];
+  }
+
+  const cleaned = rawTerms
+    .map((term) => String(term || "").trim())
+    .filter((term) => term.length > 0);
+
+  return [...new Set(cleaned)];
+}
+
+function escapeHtml(text) {
+  return text
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function buildHighlightedCaption(text, terms) {
+  let highlighted = escapeHtml(text);
+  const sortedTerms = [...terms].sort((a, b) => b.length - a.length);
+
+  sortedTerms.forEach((term) => {
+    const escapedTerm = escapeRegExp(term);
+    if (!escapedTerm) {
+      return;
+    }
+
+    const regex = new RegExp(`(${escapedTerm})`, "gi");
+    highlighted = highlighted.replace(regex, "<strong><em>$1</em></strong>");
+  });
+
+  return highlighted;
+}
+
 if (window.top === window.self) {
   const meetingId = getMeetingIdFromUrl(window.location.href);
   if (meetingId) {
     localStorage.setItem("zoom_meeting_id", meetingId);
   }
+
+  const broadcastHighlightTerms = (terms) => {
+    for (let i = 0; i < window.frames.length; i += 1) {
+      try {
+        window.frames[i].postMessage(
+          {
+            type: "PARSEJARGON_HIGHLIGHT_TERMS",
+            terms,
+          },
+          "*"
+        );
+      } catch (error) {
+        console.debug("Unable to post highlight terms to frame", error);
+      }
+    }
+  };
+
+  window.addEventListener("message", (event) => {
+    if (!event?.data || event.data.type !== "PARSEJARGON_HIGHLIGHT_TERMS") {
+      return;
+    }
+
+    const terms = normalizeTerms(event.data.terms);
+    broadcastHighlightTerms(terms);
+  });
 
   if (!document.getElementById("zoom-sidebar-extension")) {
     const html = document.documentElement;
@@ -31,10 +98,10 @@ if (window.top === window.self) {
       right: 0,
       width: "300px",
       height: "100%",
-      backgroundColor: "#ffffff",
+      backgroundColor: "#000000",
       zIndex: 999999,
-      borderLeft: "1px solid #ccc",
-      boxShadow: "0 0 5px rgba(0,0,0,0.3)",
+      borderLeft: "1px solid #1c1c1c",
+      boxShadow: "0 0 10px rgba(0,0,0,0.35)",
       overflowY: "auto",
     });
     document.body.appendChild(sidebar);
@@ -44,12 +111,21 @@ if (window.top === window.self) {
   }
 } else {
   const observedContainers = new WeakSet();
+  const containerUpdaters = new Set();
   const THROTTLE_MS = 1200;
 
   let lastCaption = "";
   let lastSentAt = 0;
+  let highlightTerms = [];
 
-  function maybeSendCaption(text) {
+  const applyCaptionHighlight = (captionSpan, rawText) => {
+    const highlightedHtml = buildHighlightedCaption(rawText, highlightTerms);
+    if (captionSpan.innerHTML !== highlightedHtml) {
+      captionSpan.innerHTML = highlightedHtml;
+    }
+  };
+
+  const maybeSendCaption = (text) => {
     const transcript = (text || "").trim();
     if (!transcript || transcript === lastCaption) {
       return;
@@ -70,9 +146,20 @@ if (window.top === window.self) {
       },
       "*"
     );
-  }
+  };
 
-  function attachObserverTo(container) {
+  const handleTermUpdates = (event) => {
+    if (!event?.data || event.data.type !== "PARSEJARGON_HIGHLIGHT_TERMS") {
+      return;
+    }
+
+    highlightTerms = normalizeTerms(event.data.terms);
+    containerUpdaters.forEach((updateFn) => updateFn());
+  };
+
+  window.addEventListener("message", handleTermUpdates);
+
+  const attachObserverTo = (container) => {
     if (observedContainers.has(container)) {
       return;
     }
@@ -83,9 +170,13 @@ if (window.top === window.self) {
       if (!captionSpan) {
         return;
       }
-      maybeSendCaption(captionSpan.innerText);
+
+      const rawText = captionSpan.innerText || "";
+      maybeSendCaption(rawText);
+      applyCaptionHighlight(captionSpan, rawText);
     };
 
+    containerUpdaters.add(updateTranscription);
     updateTranscription();
 
     const observer = new MutationObserver(updateTranscription);
@@ -98,15 +189,16 @@ if (window.top === window.self) {
     const checkInterval = setInterval(() => {
       if (!document.contains(container)) {
         observer.disconnect();
+        containerUpdaters.delete(updateTranscription);
         clearInterval(checkInterval);
       }
     }, 1000);
-  }
+  };
 
-  function scanAllContainers() {
+  const scanAllContainers = () => {
     const containers = document.querySelectorAll("#live-transcription-subtitle");
     containers.forEach((container) => attachObserverTo(container));
-  }
+  };
 
   scanAllContainers();
   setInterval(scanAllContainers, 1500);
